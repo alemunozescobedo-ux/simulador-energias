@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Energy Skate Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+html,body{height:100%;margin:0;background:#0a1128;color:#e2e8f0;font-family:'Space Grotesk',system-ui,sans-serif;overflow:hidden}
+.glass{background:rgba(12,20,48,.78);backdrop-filter:blur(10px);border:1px solid rgba(125,160,220,.2)}
+.btn{padding:.42rem .6rem;border-radius:.6rem;background:rgba(51,65,105,.55);font-size:.8rem;border:1px solid transparent;transition:background .15s}
+.btn:hover{background:rgba(71,90,140,.9)}
+.btn.on{background:linear-gradient(135deg,#0ea5e9,#6366f1);color:#fff}
+.btn:focus-visible,input:focus-visible{outline:2px solid #7dd3fc;outline-offset:2px}
+input[type=range]{width:100%;accent-color:#38bdf8}
+h3{font-size:.8rem;font-weight:700;color:#94a3b8;margin:1rem 0 .4rem}
+canvas{display:block}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+</style>
+</head>
+<body class="flex h-full">
+
+<aside id="panel" class="glass w-72 shrink-0 h-full overflow-y-auto p-4 z-20 transition-all duration-300">
+  <div class="font-bold text-lg leading-tight">Energy Skate Lab</div>
+  <div class="text-xs text-slate-400">Laboratorio virtual de energía mecánica</div>
+
+  <h3>Pistas</h3>
+  <div class="grid grid-cols-2 gap-2">
+    <button class="btn" data-t="u">Media tubería</button>
+    <button class="btn" data-t="hill">Colina y valle</button>
+    <button class="btn" data-t="loop">Bucle completo</button>
+    <button class="btn" data-t="wave">Ondas</button>
+  </div>
+  <button id="clear" class="btn w-full mt-2">Borrar pista</button>
+  <p class="text-xs text-slate-400 mt-2 leading-snug">Arrastra sobre el lienzo para dibujar tu propia pista (reemplaza la anterior). Arrastra al avatar para soltarlo o lanzarlo.</p>
+
+  <h3>Avatar</h3>
+  <div class="grid grid-cols-3 gap-2">
+    <button class="btn" data-a="skater">Patinador</button>
+    <button class="btn" data-a="board">Monopatín</button>
+    <button class="btn" data-a="cart">Carrito</button>
+  </div>
+
+  <h3>Entorno</h3>
+  <div class="grid grid-cols-2 gap-2">
+    <button class="btn" data-g="9.81">Tierra</button>
+    <button class="btn" data-g="1.62">Luna</button>
+    <button class="btn" data-g="24.79">Júpiter</button>
+    <button class="btn" data-g="0">Espacio</button>
+  </div>
+  <label class="block text-xs text-slate-300 mt-3">Gravedad: <b id="gv"></b></label>
+  <input id="g" type="range" min="0" max="26" step="0.01">
+
+  <h3>Parámetros</h3>
+  <label class="block text-xs text-slate-300">Masa: <b id="mv"></b></label>
+  <input id="m" type="range" min="10" max="100" step="1">
+  <label class="block text-xs text-slate-300 mt-2">Fricción (μ): <b id="muv"></b></label>
+  <input id="mu" type="range" min="0" max="0.4" step="0.005">
+
+  <h3>Mostrar</h3>
+  <div class="space-y-1 text-sm">
+    <label class="flex items-center gap-2"><input type="checkbox" id="o_bars" checked> Barras de energía</label>
+    <label class="flex items-center gap-2"><input type="checkbox" id="o_pie" checked> Gráfico circular</label>
+    <label class="flex items-center gap-2"><input type="checkbox" id="o_vec" checked> Vector de velocidad</label>
+    <label class="flex items-center gap-2"><input type="checkbox" id="o_grid" checked> Cuadrícula</label>
+    <label class="flex items-center gap-2"><input type="checkbox" id="o_h" checked> Medidor de altura</label>
+  </div>
+  <button id="full" class="btn w-full mt-5">Reinicio total</button>
+</aside>
+
+<main id="stage" class="relative flex-1 min-w-0 h-full">
+  <canvas id="c" class="absolute inset-0 touch-none" style="cursor:crosshair"></canvas>
+  <button id="tog" class="glass absolute top-3 left-3 rounded-lg px-3 py-1.5 text-sm z-10" title="Mostrar u ocultar panel">☰</button>
+
+  <div id="card" class="glass absolute top-3 right-3 w-64 rounded-xl p-3 text-xs z-10 pointer-events-none">
+    <div class="font-bold text-sm mb-1">Energía</div>
+    <div id="wBars"><canvas id="bars"></canvas></div>
+    <div id="wPie" class="mt-1"><canvas id="pie"></canvas></div>
+    <div class="mt-2 space-y-0.5">
+      <div class="flex justify-between"><span><i class="dot" style="background:#34d399"></i>Cinética</span><b id="rK"></b></div>
+      <div class="flex justify-between"><span><i class="dot" style="background:#60a5fa"></i>Potencial</span><b id="rP"></b></div>
+      <div class="flex justify-between"><span><i class="dot" style="background:#fb923c"></i>Térmica</span><b id="rQ"></b></div>
+      <div class="flex justify-between border-t border-slate-600 pt-0.5"><span><i class="dot" style="background:#e2e8f0"></i>Total</span><b id="rT"></b></div>
+      <div class="flex justify-between text-slate-400 pt-1"><span>Velocidad</span><span id="rV"></span></div>
+      <div class="flex justify-between text-slate-400"><span>Altura</span><span id="rH"></span></div>
+      <div class="flex justify-between text-slate-400"><span>Tiempo</span><span id="rS"></span></div>
+    </div>
+  </div>
+
+  <div class="glass absolute bottom-4 left-1/2 -translate-x-1/2 rounded-2xl px-3 py-2 flex gap-2 z-10">
+    <button id="rst" class="btn" title="Volver al punto de partida">⟲ Reiniciar</button>
+    <button id="play" class="btn on w-12 text-base" title="Reproducir o pausar (barra espaciadora)">⏸</button>
+    <button id="stp" class="btn" title="Avanzar un fotograma">⏭ Paso</button>
+    <button id="slow" class="btn" title="Cámara lenta">Cámara lenta</button>
+  </div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id),cv=$('c'),ctx=cv.getContext('2d');
+const DS=.1,DT=1/600,RAD=.16,COL={k:'#34d399',p:'#60a5fa',h:'#fb923c'};
+let W=0,H=0,dpr=1,ppm=40,oy=0,Wm=20,Hm=12,bgG;
+const opt={bars:1,pie:1,vec:1,grid:1,h:1};
+const S={x:0,y:0,vx:0,vy:0,mode:'air',s:0,v:0,side:1,m:60,g:9.81,mu:.03,E0:0,heat:0,cool:0,ang:0,up:1,face:1,t:0};
+let S0={x:0,y:5,vx:0,vy:0},tr=null,trPath=null,playing=true,slow=false,stepReq=false,acc=0,drag=null,raw=null,kind='skater',hist=[];
+const sm={x:0,y:0,tx:1,ty:0,k:0},Y=y=>oy-y*ppm;
+
+/* ---------- Pista: suavizado, remuestreo y curvatura ---------- */
+function resample(P,d){const o=[P[0]];let a=P[0],need=d;for(let i=1;i<P.length;i++){const b=P[i];let seg=Math.hypot(b[0]-a[0],b[1]-a[1]);while(seg>=need){const u=need/seg;a=[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u];o.push(a);seg=Math.hypot(b[0]-a[0],b[1]-a[1]);need=d}need-=seg;a=b}return o}
+function smooth(P,n){while(n--){const Q=[P[0]];for(let i=1;i<P.length-1;i++)Q.push([(P[i-1][0]+P[i][0]+P[i+1][0])/3,(P[i-1][1]+P[i][1]+P[i+1][1])/3]);Q.push(P[P.length-1]);P=Q}return P}
+function build(rawPts,passes){
+  let P=resample(rawPts,DS);if(P.length<5)return null;
+  P=resample(smooth(P,passes),DS);const n=P.length;if(n<5)return null;
+  const tx=[],ty=[],th=[],k=[];let pv=0;
+  for(let i=0;i<n;i++){const a=P[Math.max(i-1,0)],b=P[Math.min(i+1,n-1)],d=Math.hypot(b[0]-a[0],b[1]-a[1])||1;
+    tx.push((b[0]-a[0])/d);ty.push((b[1]-a[1])/d);let t=Math.atan2(ty[i],tx[i]);
+    if(i){while(t-pv>Math.PI)t-=2*Math.PI;while(t-pv<-Math.PI)t+=2*Math.PI}th.push(pv=t)}
+  for(let i=0;i<n;i++){const a=Math.max(i-1,0),b=Math.min(i+1,n-1);k.push((th[b]-th[a])/((b-a)*DS))}
+  let K=k;for(let p=0;p<4;p++)K=K.map((_,i)=>(K[Math.max(i-1,0)]+K[i]+K[Math.min(i+1,n-1)])/3);
+  return{X:P.map(p=>p[0]),Y:P.map(p=>p[1]),tx,ty,k:K,n,L:(n-1)*DS};
+}
+function sample(s){const n=tr.n;const f=s/DS;let i=Math.floor(f);if(i<0)i=0;if(i>n-2)i=n-2;
+  const u=Math.min(1,Math.max(0,f-i)),w=1-u;
+  sm.x=tr.X[i]*w+tr.X[i+1]*u;sm.y=tr.Y[i]*w+tr.Y[i+1]*u;
+  const a=tr.tx[i]*w+tr.tx[i+1]*u,b=tr.ty[i]*w+tr.ty[i+1]*u,d=Math.hypot(a,b)||1;
+  sm.tx=a/d;sm.ty=b/d;sm.k=tr.k[i]*w+tr.k[i+1]*u}
+function closest(px,py){let best=1e9,bs=0;
+  for(let i=0;i<tr.n-1;i++){const ax=tr.X[i],ay=tr.Y[i],dx=tr.X[i+1]-ax,dy=tr.Y[i+1]-ay;
+    let u=((px-ax)*dx+(py-ay)*dy)/(dx*dx+dy*dy||1);u=u<0?0:u>1?1:u;
+    const ex=ax+u*dx-px,ey=ay+u*dy-py,d2=ex*ex+ey*ey;if(d2<best){best=d2;bs=(i+u)*DS}}
+  return{d:Math.sqrt(best),s:bs}}
+function attach(c){sample(c.s);const nx=-sm.ty,ny=sm.tx,dd=(S.x-sm.x)*nx+(S.y-sm.y)*ny;
+  S.side=Math.abs(dd)<.02?(ny>=0?1:-1):(dd>0?1:-1);
+  S.s=c.s;S.v=S.vx*sm.tx+S.vy*sm.ty;S.mode='track';S.x=sm.x;S.y=sm.y}
+
+/* ---------- Física ---------- */
+function toAir(v,c){S.x=sm.x;S.y=sm.y;S.vx=v*sm.tx;S.vy=v*sm.ty;S.mode='air';S.cool=c}
+function phys(dt){
+  const m=S.m,g=S.g;S.t+=dt;S.cool-=dt;
+  if(S.mode==='track'){
+    sample(S.s);S.v-=g*sm.ty*dt;                       // componente tangencial de la gravedad
+    const N=S.side*(S.v*S.v*sm.k+g*sm.tx);             // fuerza normal por unidad de masa
+    if(N<0)toAir(S.v,.12);                             // pierde contacto con la pista
+    else{
+      const df=S.mu*N*dt;S.v=Math.abs(S.v)<=df?0:S.v-Math.sign(S.v)*df;   // fricción cinética / estática
+      S.s+=S.v*dt;
+      if(S.s<0||S.s>tr.L){S.s=S.s<0?0:tr.L;sample(S.s);toAir(S.v,.5)}
+      else{sample(S.s);S.x=sm.x;S.y=sm.y;S.vx=S.v*sm.tx;S.vy=S.v*sm.ty}
+    }
+  }else{
+    if(!(S.y<=0&&S.vy===0))S.vy-=g*dt;
+    S.x+=S.vx*dt;S.y+=S.vy*dt;
+    if(S.y<=0){S.y=0;if(S.vy<0){S.vy=-S.vy*.35;if(S.vy<.6)S.vy=0}
+      if(S.vy===0){const d=(S.mu+.03)*g*dt;S.vx=Math.abs(S.vx)<=d?0:S.vx-Math.sign(S.vx)*d}}
+    if(S.x<.15){S.x=.15;S.vx=Math.abs(S.vx)*.6}else if(S.x>Wm-.15){S.x=Wm-.15;S.vx=-Math.abs(S.vx)*.6}
+    if(S.y>Hm-.2){S.y=Hm-.2;S.vy=-Math.abs(S.vy)*.6}
+    if(tr&&S.cool<=0){const c=closest(S.x,S.y);
+      if(c.d<RAD){sample(c.s);const nx=-sm.ty,ny=sm.tx,sd=((S.x-sm.x)*nx+(S.y-sm.y)*ny)>=0?1:-1;
+        if((S.vx*nx+S.vy*ny)*sd<-.01)attach(c)}}
+  }
+  // La energía térmica es lo que se disipó: E0 − (Ec + Ep), nunca decrece
+  const e=.5*m*(S.vx*S.vx+S.vy*S.vy)+m*g*S.y;if(S.E0-e>S.heat)S.heat=S.E0-e;
+}
+function en(){const v2=S.vx*S.vx+S.vy*S.vy,k=.5*S.m*v2,p=S.m*S.g*S.y;return{k,p,h:S.heat,t:k+p+S.heat,v:Math.sqrt(v2)}}
+function rebase(){S.E0=.5*S.m*(S.vx*S.vx+S.vy*S.vy)+S.m*S.g*S.y+S.heat}
+function place(x,y,vx,vy,save=true){
+  const ke=.5*S.m*(vx*vx+vy*vy);Object.assign(S,{x,y,vx,vy,mode:'air',heat:0,cool:0,t:0});
+  if(save)S0={x,y,vx,vy};
+  if(tr){const c=closest(x,y);if(c.d<.4)attach(c)}
+  S.E0=ke+S.m*S.g*S.y}
+function resetSk(){place(S0.x,S0.y,S0.vx,S0.vy,false);setPlay(false)}
+
+/* ---------- Pistas predefinidas ---------- */
+const rg=(n,f)=>Array.from({length:n+1},(_,i)=>f(i/n));
+const PRE={
+  u:()=>rg(60,u=>[-8+16*u,.3+7*(2*u-1)**2]),
+  hill:()=>rg(90,u=>{const x=-11+22*u;return[x,.5+.06*x*x+3.2*Math.exp(-((x/2.2)**2))]}),
+  wave:()=>rg(90,u=>{const x=-11+22*u;return[x,3.5+2.8*Math.cos(.9*x)]}),
+  loop:()=>{const R=2.6,d=1.8,o=[];
+    rg(40,u=>[-13+13*u,.3+10.2*(1+Math.cos(Math.PI*u))/2]).forEach(p=>o.push(p));
+    rg(70,u=>{const f=u*2*Math.PI;return[R*Math.sin(f)+d*u,.3+R-R*Math.cos(f)]}).slice(1).forEach(p=>o.push(p));
+    rg(20,u=>[d+8*u,.3]).slice(1).forEach(p=>o.push(p));return o}
+},F0={u:.12,hill:.1,wave:.19,loop:.03};
+function loadPre(k){
+  const P=PRE[k](),xs=P.map(a=>a[0]),x0=Math.min(...xs),x1=Math.max(...xs),sx=Math.min(1,(Wm-1)/(x1-x0)),cx=(x0+x1)/2;
+  tr=build(P.map(a=>[Wm/2+(a[0]-cx)*sx,a[1]]),1);trPath=null;
+  sample(F0[k]*tr.L);place(sm.x,sm.y,0,0);setPlay(true)}
+
+/* ---------- Interacción con el lienzo ---------- */
+const P2=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)/ppm,(oy-(e.clientY-r.top))/ppm]};
+const nearSk=(x,y)=>Math.hypot(x-S.x,y-S.y-.8)<1.1;
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);const[x,y]=P2(e);
+  if(nearSk(x,y)){drag={dx:S.x-x,dy:S.y-y};hist=[];S.mode='air';S.vx=S.vy=0;cv.style.cursor='grabbing'}
+  else raw=[[Math.min(Wm-.2,Math.max(.2,x)),Math.max(.15,y)]]});
+cv.addEventListener('pointermove',e=>{const[x,y]=P2(e);
+  if(drag){S.x=Math.min(Wm-.15,Math.max(.15,x+drag.dx));S.y=Math.min(Hm-.2,Math.max(0,y+drag.dy));
+    hist.push([performance.now(),S.x,S.y]);if(hist.length>8)hist.shift()}
+  else if(raw){const l=raw[raw.length-1];if(Math.hypot(x-l[0],y-l[1])>.12)raw.push([Math.min(Wm-.2,Math.max(.2,x)),Math.max(.15,y)])}
+  else cv.style.cursor=nearSk(x,y)?'grab':'crosshair'});
+function release(){
+  if(drag){let vx=0,vy=0;const n=performance.now(),a=hist.find(h=>n-h[0]<120),b=hist[hist.length-1];
+    if(a&&b&&b[0]>a[0]){const dt=(b[0]-a[0])/1000;vx=(b[1]-a[1])/dt;vy=(b[2]-a[2])/dt;const sp=Math.hypot(vx,vy);
+      if(sp<1.5)vx=vy=0;else if(sp>25){vx*=25/sp;vy*=25/sp}}
+    drag=null;place(S.x,S.y,vx,vy);setPlay(true);cv.style.cursor='grab'}
+  else if(raw){const t=build(raw,8);raw=null;
+    if(t){tr=t;trPath=null;if(S.mode==='track'){S.mode='air';S.cool=0}}}}
+cv.addEventListener('pointerup',release);cv.addEventListener('pointercancel',release);
+
+/* ---------- Dibujo ---------- */
+function arrow(x,y,dx,dy,c){const l=Math.hypot(dx,dy);if(l<3)return;const a=Math.atan2(dy,dx);
+  ctx.strokeStyle=ctx.fillStyle=c;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx,y+dy);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x+dx,y+dy);ctx.lineTo(x+dx-10*Math.cos(a-.4),y+dy-10*Math.sin(a-.4));
+  ctx.lineTo(x+dx-10*Math.cos(a+.4),y+dy-10*Math.sin(a+.4));ctx.fill()}
+function drawAv(){
+  if(kind==='cart'){ctx.fillStyle='#f97316';ctx.fillRect(-.7,-.7,1.4,.45);ctx.fillStyle='#fdba74';ctx.fillRect(-.7,-.7,1.4,.1);
+    [-.42,.42].forEach(x=>{ctx.beginPath();ctx.arc(x,-.2,.2,0,7);ctx.fillStyle='#0f172a';ctx.fill();ctx.strokeStyle='#e2e8f0';ctx.lineWidth=.05;ctx.stroke()});return}
+  ctx.fillStyle='#fbbf24';ctx.beginPath();ctx.roundRect?ctx.roundRect(-.65,-.26,1.3,.1,.05):ctx.rect(-.65,-.26,1.3,.1);ctx.fill();
+  [-.42,.42].forEach(x=>{ctx.beginPath();ctx.arc(x,-.1,.1,0,7);ctx.fillStyle='#e2e8f0';ctx.fill()});
+  if(kind==='board')return;
+  ctx.strokeStyle='#cbd5e1';ctx.lineWidth=.14;ctx.beginPath();
+  ctx.moveTo(-.25,-.3);ctx.lineTo(-.12,-.65);ctx.lineTo(0,-1);ctx.moveTo(.25,-.3);ctx.lineTo(.14,-.65);ctx.lineTo(0,-1);ctx.stroke();
+  ctx.strokeStyle='#38bdf8';ctx.lineWidth=.3;ctx.beginPath();ctx.moveTo(0,-1);ctx.lineTo(0,-1.55);ctx.stroke();
+  ctx.strokeStyle='#cbd5e1';ctx.lineWidth=.1;ctx.beginPath();ctx.moveTo(0,-1.45);ctx.lineTo(-.5,-1.15);ctx.moveTo(0,-1.45);ctx.lineTo(.5,-1.3);ctx.stroke();
+  ctx.fillStyle='#fcd9b6';ctx.beginPath();ctx.arc(0,-1.82,.18,0,7);ctx.fill();
+  ctx.fillStyle='#f43f5e';ctx.beginPath();ctx.arc(0,-1.85,.2,Math.PI,0);ctx.fill()}
+
+function render(){
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle=bgG;ctx.fillRect(0,0,W,H);
+  if(opt.grid){ctx.lineWidth=1;ctx.font='10px Space Grotesk,system-ui';ctx.fillStyle='rgba(148,163,184,.65)';
+    for(let i=0;i<=Wm;i++){ctx.strokeStyle=i%5?'rgba(148,163,184,.07)':'rgba(148,163,184,.22)';ctx.beginPath();ctx.moveTo(i*ppm,0);ctx.lineTo(i*ppm,oy);ctx.stroke();if(i%5==0&&i)ctx.fillText(i+' m',i*ppm+3,oy+14)}
+    for(let i=0;i<=Hm;i++){ctx.strokeStyle=i%5?'rgba(148,163,184,.07)':'rgba(148,163,184,.22)';ctx.beginPath();ctx.moveTo(0,Y(i));ctx.lineTo(W,Y(i));ctx.stroke();if(i%2==0&&i)ctx.fillText(i+' m',4,Y(i)-3)}}
+  const gg=ctx.createLinearGradient(0,oy,0,H);gg.addColorStop(0,'#2b3a67');gg.addColorStop(1,'#0a1128');
+  ctx.fillStyle=gg;ctx.fillRect(0,oy,W,H-oy);ctx.fillStyle='#7c8fc0';ctx.fillRect(0,oy,W,2);
+  if(tr){if(!trPath){trPath=new Path2D();tr.X.forEach((x,i)=>{const px=x*ppm,py=Y(tr.Y[i]);i?trPath.lineTo(px,py):trPath.moveTo(px,py)})}
+    ctx.lineCap=ctx.lineJoin='round';
+    [[ppm*.5,'rgba(56,189,248,.14)'],[ppm*.2,'#0369a1'],[ppm*.09,'#e0f2fe']].forEach(([w,c])=>{ctx.lineWidth=w;ctx.strokeStyle=c;ctx.stroke(trPath)})}
+  if(raw&&raw.length>1){ctx.strokeStyle='#fde047';ctx.lineWidth=3;ctx.setLineDash([2,6]);ctx.beginPath();
+    raw.forEach((p,i)=>i?ctx.lineTo(p[0]*ppm,Y(p[1])):ctx.moveTo(p[0]*ppm,Y(p[1])));ctx.stroke();ctx.setLineDash([])}
+  // orientación del avatar
+  if(S.mode==='track'&&tr){sample(S.s);S.ang=Math.atan2(sm.ty,sm.tx);S.up=S.side;if(Math.abs(S.v)>.3)S.face=Math.sign(S.v)}
+  else{let d=-S.ang;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;S.ang+=d*.12;S.up=1;if(Math.abs(S.vx)>.3)S.face=Math.sign(S.vx)}
+  const sx=S.x*ppm,sy=Y(S.y);
+  if(opt.h&&S.y>.05){ctx.strokeStyle='rgba(250,204,21,.8)';ctx.fillStyle='#fde047';ctx.lineWidth=1.5;ctx.setLineDash([5,4]);
+    ctx.beginPath();ctx.moveTo(sx+26,sy);ctx.lineTo(sx+26,oy);ctx.stroke();ctx.setLineDash([]);
+    ctx.font='bold 11px Space Grotesk,system-ui';ctx.fillText('h = '+S.y.toFixed(2)+' m',sx+32,(sy+oy)/2)}
+  ctx.save();ctx.translate(sx,sy);ctx.rotate(-S.ang);ctx.scale(S.face*ppm,S.up*ppm);ctx.translate(0,-.08);ctx.lineCap='round';drawAv();ctx.restore();
+  if(drag){ctx.strokeStyle='rgba(125,211,252,.8)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx,sy-.8*ppm,1.1*ppm,0,7);ctx.stroke()}
+  if(opt.vec){const sp=Math.hypot(S.vx,S.vy);if(sp>.05){const L=Math.min(sp*.35,5)*ppm;
+    arrow(sx,sy-.9*ppm,S.vx/sp*L,-S.vy/sp*L,'#f472b6');ctx.font='bold 11px Space Grotesk,system-ui';ctx.fillStyle='#f9a8d4';ctx.fillText('v = '+sp.toFixed(1)+' m/s',sx+S.vx/sp*L+8,sy-.9*ppm-S.vy/sp*L-6)}}
+}
+
+/* ---------- Gráficos de energía ---------- */
+const bc=$('bars'),bx=bc.getContext('2d'),pc=$('pie'),px=pc.getContext('2d');
+function sizeC(c,w,h){c.width=w*dpr;c.height=h*dpr;c.style.width=w+'px';c.style.height=h+'px'}
+function charts(E){
+  if(opt.bars){bx.setTransform(dpr,0,0,dpr,0,0);bx.clearRect(0,0,232,110);const mx=Math.max(E.t,50)*1.05,hh=84;
+    bx.font='10px Space Grotesk,system-ui';bx.textAlign='center';
+    [['Ec',E.k,COL.k],['Ep',E.p,COL.p],['Térm.',E.h,COL.h]].forEach(([n,v,c],i)=>{const x=10+i*54,h=Math.max(0,v)/mx*hh;
+      bx.fillStyle=c;bx.fillRect(x,92-h,38,h);bx.fillStyle='#94a3b8';bx.fillText(n,x+19,105)});
+    let yy=92;[[E.k,COL.k],[E.p,COL.p],[E.h,COL.h]].forEach(([v,c])=>{const h=Math.max(0,v)/mx*hh;bx.fillStyle=c;bx.fillRect(172,yy-h,38,h);yy-=h});
+    bx.fillStyle='#94a3b8';bx.fillText('Total',191,105);bx.fillStyle='#475569';bx.fillRect(4,92,224,1)}
+  if(opt.pie){px.setTransform(dpr,0,0,dpr,0,0);px.clearRect(0,0,232,96);const t=E.k+E.p+E.h;
+    px.strokeStyle='#334155';px.lineWidth=2;px.beginPath();px.arc(48,48,42,0,7);px.stroke();
+    let a=-Math.PI/2;px.font='12px Space Grotesk,system-ui';px.textAlign='left';
+    [['Ec',E.k,COL.k],['Ep',E.p,COL.p],['Térmica',E.h,COL.h]].forEach(([n,v,c],i)=>{const f=t>0?Math.max(0,v)/t:0;
+      px.fillStyle=c;if(f>0){px.beginPath();px.moveTo(48,48);px.arc(48,48,42,a,a+f*2*Math.PI);px.fill()}a+=f*2*Math.PI;
+      px.fillText(n+' '+(f*100).toFixed(0)+'%',110,34+i*20)})}
+}
+function readout(E){const f=v=>v.toFixed(v<100?1:0)+' J';
+  $('rK').textContent=f(E.k);$('rP').textContent=f(E.p);$('rQ').textContent=f(E.h);$('rT').textContent=f(E.t);
+  $('rV').textContent=E.v.toFixed(2)+' m/s';$('rH').textContent=S.y.toFixed(2)+' m';$('rS').textContent=S.t.toFixed(1)+' s'}
+
+/* ---------- Bucle principal ---------- */
+let last=performance.now(),fc=0;
+function frame(now){
+  const dt=Math.min((now-last)/1000,.05);last=now;
+  if(playing&&!drag&&!raw)acc+=dt*(slow?.25:1);
+  if(stepReq){acc+=1/60;stepReq=false}
+  let n=0;while(acc>=DT&&n<60){phys(DT);acc-=DT;n++}if(acc>=DT)acc=0;
+  if(!isFinite(S.x+S.y+S.vx+S.vy))resetSk();
+  render();const E=en();charts(E);if(++fc%3==0)readout(E);
+  requestAnimationFrame(frame)}
+
+/* ---------- Interfaz ---------- */
+function resize(){
+  const r=$('stage').getBoundingClientRect();dpr=window.devicePixelRatio||1;W=r.width;H=r.height;
+  cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';
+  ppm=Math.max(20,(H-50)/12);oy=H-40;Wm=W/ppm;Hm=oy/ppm;trPath=null;
+  bgG=ctx.createLinearGradient(0,0,0,H);bgG.addColorStop(0,'#0a1128');bgG.addColorStop(1,'#1b2a5e');
+  sizeC(bc,232,110);sizeC(pc,232,96)}
+function setPlay(p){playing=p;$('play').textContent=p?'⏸':'▶';$('play').classList.toggle('on',p)}
+function setKind(k){kind=k;document.querySelectorAll('[data-a]').forEach(b=>b.classList.toggle('on',b.dataset.a===k))}
+function setG(v){S.g=v;$('g').value=v;$('gv').textContent=v.toFixed(2)+' m/s²';rebase();
+  document.querySelectorAll('[data-g]').forEach(b=>b.classList.toggle('on',Math.abs(+b.dataset.g-v)<.005))}
+function setM(v){S.heat*=v/S.m;S.m=v;$('m').value=v;$('mv').textContent=v+' kg';rebase()}
+function setMu(v){S.mu=v;$('mu').value=v;$('muv').textContent=v.toFixed(3)}
+
+document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>loadPre(b.dataset.t));
+document.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>setKind(b.dataset.a));
+document.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>setG(+b.dataset.g));
+$('g').oninput=e=>setG(+e.target.value);
+$('m').oninput=e=>setM(+e.target.value);
+$('mu').oninput=e=>setMu(+e.target.value);
+$('clear').onclick=()=>{tr=null;trPath=null;if(S.mode==='track')S.mode='air'};
+['bars','pie','vec','grid','h'].forEach(k=>$('o_'+k).onchange=e=>{opt[k]=e.target.checked?1:0;
+  if(k==='bars')$('wBars').style.display=opt[k]?'':'none';if(k==='pie')$('wPie').style.display=opt[k]?'':'none'});
+$('rst').onclick=resetSk;
+$('play').onclick=()=>setPlay(!playing);
+$('stp').onclick=()=>{setPlay(false);stepReq=true};
+$('slow').onclick=()=>{slow=!slow;$('slow').classList.toggle('on',slow)};
+$('tog').onclick=()=>{const p=$('panel');p.style.marginLeft=p.style.marginLeft?'':'-18rem'};
+function init(){setM(60);setMu(.03);setKind('skater');setG(9.81);loadPre('u')}
+$('full').onclick=()=>{slow=false;$('slow').classList.remove('on');init()};
+addEventListener('keydown',e=>{if(e.code==='Space'&&!/INPUT|BUTTON/.test(e.target.tagName)){e.preventDefault();setPlay(!playing)}});
+
+if(innerWidth<820)$('panel').style.marginLeft='-18rem';
+resize();new ResizeObserver(resize).observe($('stage'));
+init();requestAnimationFrame(frame);
+</script>
+</body>
+</html>
